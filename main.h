@@ -87,7 +87,7 @@ void Error_Handler(void);
 #define Encoder_button_Pin GPIO_PIN_6
 #define Encoder_button_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
-
+#define voltage 2048
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

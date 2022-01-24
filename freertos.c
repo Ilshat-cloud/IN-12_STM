@@ -26,7 +26,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "tim.h"
+#include "adc.h"
+#include "dma.h"
+#include "iwdg.h"
+#include "rtc.h"
+#include "gpio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,7 +51,12 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
+//==================================================================variables===============================================//
+RTC_TimeTypeDef CurTime = {0};
+uint32_t button=0;
+uint8_t flag=0,PWM=10;
+uint16_t EncoderVal,dma,i;
+//--------------------------------------------------------------------------------------------------------------------------//
 /* USER CODE END Variables */
 /* Definitions for main */
 osThreadId_t mainHandle;
@@ -122,10 +132,57 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
+  HAL_TIM_Encoder_Start(&htim3,TIM_CHANNEL_ALL);
+  HAL_TIM_IC_Start_DMA(&htim4,TIM_CHANNEL_2,&button,1);  
+  HAL_TIM_PWM_Start(&htim2,TIM_CHANNEL_1);
+  EncoderVal=__HAL_TIM_GET_COUNTER(&htim3);
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    HAL_IWDG_Refresh(&hiwdg);
+    if (flag==0)
+    {
+      HAL_RTC_GetTime(&hrtc, &CurTime, RTC_FORMAT_BIN);    
+    }
+    
+    if ((button>500)&(flag==0))
+      {
+        flag=1;         //activate setting hours
+        __HAL_TIM_SET_COUNTER(&htim3,CurTime.Hours);
+        button=0;
+      }
+    if (flag!=0)
+      {   
+        if (button>500)
+          {
+            flag=0;             //close settings
+            HAL_RTC_SetTime(&hrtc, &CurTime, RTC_FORMAT_BIN);
+            button=0;
+          }
+        if (flag==1)
+          {
+            if(button>100)
+              {
+                __HAL_TIM_SET_COUNTER(&htim3,CurTime.Minutes);
+                flag=2;
+                button=0;
+              }
+          }
+        if (flag==2)
+          {
+            if (button>100)
+              {
+                __HAL_TIM_SET_COUNTER(&htim3,CurTime.Hours);
+                flag=1;
+                button=0;
+              }    
+          } 
+
+      }  
+
+    
+    osDelay(500);
+
   }
   /* USER CODE END StartDefaultTask */
 }
@@ -140,10 +197,123 @@ void StartDefaultTask(void *argument)
 void StartTask02(void *argument)
 {
   /* USER CODE BEGIN StartTask02 */
+  osDelay(500);
+  uint8_t migalka=0,digit_set=0,digit;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    HAL_ADC_Stop(&hadc1);
+    HAL_ADC_Stop_DMA(&hadc1);
+ //   PWM=87;
+   //==================================PWM============================//
+    if ((dma<voltage)&(PWM<93))
+      {
+         PWM++; 
+      }
+    else if ((dma>voltage)&(PWM>7))
+      {
+         PWM--;  
+      }
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, PWM);
+    //----------------------------------------------------------------//
+    //==========================time management=======================//
+    switch (flag)
+    {
+    case 1:
+        CurTime.Hours=EncoderVal%24;
+       break;
+    case 2:
+        CurTime.Minutes=EncoderVal%60;
+       break;
+    }
+    //-----------------------------------------------------------------//
+    
+    EncoderVal=__HAL_TIM_GET_COUNTER(&htim3);
+    HAL_GPIO_WritePin(Digit_1_GPIO_Port,Digit_1_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Digit_2_GPIO_Port,Digit_2_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Digit_3_GPIO_Port,Digit_3_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Digit_4_GPIO_Port,Digit_4_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(Dot_GPIO_Port,Dot_Pin,GPIO_PIN_RESET );
+
+    osDelay(1); //some delay becouse of lamps so slow
+    
+     //==========================time management=======================//
+    switch (digit_set)
+    {
+    case 0:
+       digit=CurTime.Hours/10;
+       break;
+    case 1:
+       digit=CurTime.Hours%10; 
+       break;
+    case 2:
+       digit=CurTime.Minutes/10;               
+       break;
+    case 3:
+       digit=CurTime.Minutes%10; 
+       break;
+
+    }
+    
+    if (digit<10)                               //insurance
+    {
+      HAL_GPIO_WritePin(OUT_A0_GPIO_Port,OUT_A0_Pin, digit&0x01);
+      HAL_GPIO_WritePin(OUT_A1_GPIO_Port,OUT_A1_Pin, digit&0x02);
+      HAL_GPIO_WritePin(OUT_A2_GPIO_Port,OUT_A2_Pin, digit&0x04);
+      HAL_GPIO_WritePin(OUT_A3_GPIO_Port,OUT_A3_Pin, digit&0x08);
+    }else{digit=0;}
+
+    //-----------------------------------------------------------------//   
+    
+        switch (digit_set)
+    {
+    case 0:
+       HAL_GPIO_WritePin(Digit_1_GPIO_Port,Digit_1_Pin, GPIO_PIN_SET);
+       break;
+    case 1:
+       HAL_GPIO_WritePin(Digit_2_GPIO_Port,Digit_2_Pin, GPIO_PIN_SET); 
+       break;
+    case 2:              
+       HAL_GPIO_WritePin(Digit_3_GPIO_Port,Digit_3_Pin, GPIO_PIN_SET);
+       break;
+    case 3:
+       HAL_GPIO_WritePin(Digit_4_GPIO_Port,Digit_4_Pin, GPIO_PIN_SET); 
+       break;
+    case 4:
+      if (migalka>100)
+        {
+          HAL_GPIO_WritePin(Dot_GPIO_Port,Dot_Pin,GPIO_PIN_SET);
+        }
+      break;
+    }
+    
+    //=========================blynk on the settings page and dot=============================//
+    if (migalka>100)
+      {
+        if (flag==1)
+          {
+              HAL_GPIO_WritePin(Digit_1_GPIO_Port,Digit_1_Pin, GPIO_PIN_RESET);
+              HAL_GPIO_WritePin(Digit_2_GPIO_Port,Digit_2_Pin, GPIO_PIN_RESET);
+          }
+        else if (flag==2)
+          {
+              HAL_GPIO_WritePin(Digit_3_GPIO_Port,Digit_3_Pin, GPIO_PIN_RESET);
+              HAL_GPIO_WritePin(Digit_4_GPIO_Port,Digit_4_Pin, GPIO_PIN_RESET);
+          }
+        
+      }
+    if (migalka>200)
+        {
+        migalka=0;
+        //digit++;                //debug
+        }
+    //--------------------------------------------------------------------------------//
+    migalka++;
+    //digit_set=1;                //debug
+    digit_set++;
+    digit_set=(digit_set>4)?0:digit_set;
+    HAL_ADC_Start_DMA(&hadc1,(uint32_t*)&dma,1);
+    osDelay(3);
   }
   /* USER CODE END StartTask02 */
 }
