@@ -145,7 +145,7 @@ void StartDefaultTask(void *argument)
       HAL_RTC_GetTime(&hrtc, &CurTime, RTC_FORMAT_BIN);    
     }
     
-    if ((button>500)&(flag==0))
+    if ((button>500)&&(flag==0))
       {
         flag=1;         //activate setting hours
         __HAL_TIM_SET_COUNTER(&htim3,CurTime.Hours);
@@ -206,11 +206,11 @@ void StartTask02(void *argument)
     HAL_ADC_Stop_DMA(&hadc1);
  //   PWM=87;
    //==================================PWM============================//
-    if ((dma<voltage)&(PWM<93))
+    if ((dma<voltage)&&(PWM<93))
       {
          PWM++; 
       }
-    else if ((dma>voltage)&(PWM>7))
+    else if ((dma>voltage)&&(PWM>7))
       {
          PWM--;  
       }
